@@ -43,7 +43,7 @@ data "aws_iam_policy_document" "lambda_policy" {
   }
 
   dynamic "statement" {
-    for_each = var.ledger_name ? [1] : []
+    for_each = var.ledger_name != null ? [1] : []
     content {
       effect    = "Allow"
       actions   = ["qldb:ExportJournalToS3"]
@@ -52,7 +52,7 @@ data "aws_iam_policy_document" "lambda_policy" {
   }
 
   dynamic "statement" {
-    for_each = var.ledger_name ? [1] : []
+    for_each = var.ledger_name != null ? [1] : []
     content {
       effect    = "Allow"
       actions   = ["iam:PassRole"]
@@ -61,7 +61,7 @@ data "aws_iam_policy_document" "lambda_policy" {
   }
 
   dynamic "statement" {
-    for_each = var.qldb_key_arn ? [1] : []
+    for_each = var.ledger_name != null ? [1] : []
     content {
       effect    = "Allow"
       actions   = ["kms:Decrypt"]
@@ -81,7 +81,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
 ####################
 module "qldb_export_role" {
   source = "./modules/qldb_export_role"
-  count  = var.ledger_name ? 1 : 0
+  count  = var.ledger_name != null ? 1 : 0
 
   name          = var.name
   s3_bucket_arn = var.s3_bucket_arn
@@ -111,7 +111,7 @@ resource "aws_lambda_function" "logs_exporter_lambda" {
     variables = {
       S3_BUCKET       = var.s3_bucket_arn
       AWS_ACCOUNT     = var.account_id
-      EXPORT_ROLE_ARN = var.ledger_name ? module.qldb_export_role[0].arn : null
+      EXPORT_ROLE_ARN = var.ledger_name != null ? module.qldb_export_role[0].arn : null
       LEDGER_NAME     = var.ledger_name
     }
   }
@@ -123,8 +123,6 @@ resource "aws_lambda_function" "logs_exporter_lambda" {
       subnet_ids         = var.vpc_subnet_ids
     }
   }
-
-  depends_on = [aws_cloudwatch_log_group.lambda]
 }
 
 resource "aws_lambda_permission" "log_exporter" {
