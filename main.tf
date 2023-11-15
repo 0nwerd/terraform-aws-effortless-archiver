@@ -1,10 +1,23 @@
-data "archive_file" "lambda_zip" {
-  type        = "zip"
-  source_file = "${abspath(path.cwd)}/lambda/lambda.py"
-  output_path = "${abspath(path.cwd)}/lambda/lambda.zip"
+###############
+# Lambda role #
+###############
+data "aws_iam_policy_document" "assume_role_lambda" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+  }
 }
 
-data "aws_iam_policy_document" "logs_exporter_policy" {
+resource "aws_iam_role" "lambda_role" {
+  name_prefix         = "${var.name}_role"
+  assume_role_policy  = data.aws_iam_policy_document.assume_role_lambda.json
+  managed_policy_arns = var.vpc_subnet_ids != null && var.vpc_security_group_ids != null ? ["arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"] : null
+}
+
+data "aws_iam_policy_document" "lambda_policy" {
   statement {
     effect    = "Allow"
     actions   = ["logs:CreateExportTask", "logs:Describe*", "logs:ListTagsLogGroup"]
@@ -14,61 +27,79 @@ data "aws_iam_policy_document" "logs_exporter_policy" {
   statement {
     effect    = "Allow"
     actions   = ["ssm:DescribeParameters", "ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:PutParameter"]
-    resources = ["arn:aws:ssm:${var.region}:${var.account_id}:parameter/log-exporter-last-export/*", ]
-  }
-
-  statement {
-    effect    = "Allow"
-    actions   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
-    resources = ["arn:aws:ssm:${var.region}:${var.account_id}:parameter/log-exporter-last-export/*", ]
-  }
-
-  statement {
-    effect    = "Allow"
-    actions   = ["s3:PutObject", "s3:PutObjectACL"]
-    resources = ["arn:aws:s3:::${var.s3_bucket_arn}/*"]
+    resources = ["arn:aws:ssm:${var.region}:${var.account_id}:parameter/*", ]
   }
 
   statement {
     effect    = "Allow"
     actions   = ["s3:PutBucketAcl", "s3:GetBucketAcl"]
-    resources = ["arn:aws:s3:::${var.s3_bucket_arn}"]
+    resources = [var.s3_bucket_arn]
   }
 
   statement {
     effect    = "Allow"
-    actions   = ["qldb:ExportJournalToS3"]
-    resources = ["arn:aws:qldb:${var.region}:${var.account_id}:*"]
+    actions   = ["s3:PutObject", "s3:PutObjectACL"]
+    resources = ["${var.s3_bucket_arn}/*"]
   }
 
-  statement {
-    effect    = "Allow"
-    actions   = ["iam:PassRole"]
-    resources = [module.qldb_export_task_role.arn]
+  dynamic "statement" {
+    for_each = var.ledger_name ? [1] : []
+    content {
+      effect    = "Allow"
+      actions   = ["qldb:ExportJournalToS3"]
+      resources = ["arn:aws:qldb:${var.region}:${var.account_id}:*"]
+    }
   }
 
-  statement {
-    effect    = "Allow"
-    actions   = ["kms:Decrypt"]
-    resources = [var.qldb_key_arn]
+  dynamic "statement" {
+    for_each = var.ledger_name ? [1] : []
+    content {
+      effect    = "Allow"
+      actions   = ["iam:PassRole"]
+      resources = [module.qldb_export_role[0].arn]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.qldb_key_arn ? [1] : []
+    content {
+      effect    = "Allow"
+      actions   = ["kms:Decrypt"]
+      resources = [var.qldb_key_arn]
+    }
   }
 }
 
-//Add a role for lambda
-// CREATE AN IAM ROLE FOR THE EXPORT TASKS
-
-resource "aws_iam_role_policy" "logs_exporter_policy" {
-  name_prefix = "log-exporter"
-  role        = module.logs_exporter_role.id
-  policy      = data.aws_iam_policy_document.logs_exporter_policy.json
+resource "aws_iam_role_policy" "lambda_policy" {
+  name_prefix = "efforteless-exporter"
+  role        = aws_iam_role.lambda_role.name
+  policy      = data.aws_iam_policy_document.lambda_policy.json
 }
 
-//Add modular security group
+####################
+# QLDB export role #
+####################
+module "qldb_export_role" {
+  source = "./modules/qldb_export_role"
+  count  = var.ledger_name ? 1 : 0
+
+  name          = var.name
+  s3_bucket_arn = var.s3_bucket_arn
+}
+
+###################
+# Lambda function #
+###################
+data "archive_file" "lambda_zip" {
+  type        = "zip"
+  source_file = "${path.module}/lambda/lambda.py"
+  output_path = "${path.module}/lambda/lambda.zip"
+}
 
 resource "aws_lambda_function" "logs_exporter_lambda" {
-  function_name    = "CloudWatchLogsExporter"
-  description      = "Export CloudWatch Logs to a S3 bucket"
-  role             = null
+  function_name    = var.name
+  description      = "Export CloudWatch Logs (or QLDB Journal) to a S3 bucket"
+  role             = aws_iam_role.lambda_role.arn
   handler          = "lambda.lambda_handler"
   filename         = data.archive_file.lambda_zip.output_path
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
@@ -78,40 +109,22 @@ resource "aws_lambda_function" "logs_exporter_lambda" {
 
   environment {
     variables = {
-      S3_BUCKET   = var.s3_bucket_arn
-      AWS_ACCOUNT = var.account_id
-      EXPORT_ROLE_ARN = module.qldb_export_task_role.arn
+      S3_BUCKET       = var.s3_bucket_arn
+      AWS_ACCOUNT     = var.account_id
+      EXPORT_ROLE_ARN = var.ledger_name ? module.qldb_export_role[0].arn : null
       LEDGER_NAME     = var.ledger_name
     }
   }
 
   dynamic "vpc_config" {
-    for_each = length(var.subnet_ids) > 0 ? [""] : [] # One block if var.vpc_subnets is not empty
+    for_each = var.vpc_subnet_ids != null && var.vpc_security_group_ids != null ? [true] : []
     content {
-      subnet_ids         = var.subnet_ids
-      security_group_ids = [module.logs_exporter_lambda_sg.id]
+      security_group_ids = var.vpc_security_group_ids
+      subnet_ids         = var.vpc_subnet_ids
     }
   }
 
   depends_on = [aws_cloudwatch_log_group.lambda]
-}
-
-resource "aws_cloudwatch_log_group" "lambda" {
-  name              = "/aws/lambda/CloudWatchLogsExporter"
-  retention_in_days = var.cloudwatch_retention
-  kms_key_id        = var.cloudwatch_logs_key
-}
-
-resource "aws_cloudwatch_event_rule" "logs_exporter_rule" {
-  name_prefix         = "logs-exporter"
-  description         = "Fires periodically to export logs to S3"
-  schedule_expression = "rate(4 hours)"
-}
-
-resource "aws_cloudwatch_event_target" "logs_exporter_target" {
-  target_id = "logs-exporter"
-  rule      = aws_cloudwatch_event_rule.logs_exporter_rule.name
-  arn       = aws_lambda_function.logs_exporter_lambda.arn
 }
 
 resource "aws_lambda_permission" "log_exporter" {
@@ -120,4 +133,16 @@ resource "aws_lambda_permission" "log_exporter" {
   function_name = aws_lambda_function.logs_exporter_lambda.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.logs_exporter_rule.arn
+}
+
+resource "aws_cloudwatch_event_rule" "logs_exporter_rule" {
+  name_prefix         = "efforteless-exporter"
+  description         = "Fires periodically to export logs to S3"
+  schedule_expression = "rate(4 hours)"
+}
+
+resource "aws_cloudwatch_event_target" "logs_exporter_target" {
+  target_id = "efforteless-exporter"
+  rule      = aws_cloudwatch_event_rule.logs_exporter_rule.name
+  arn       = aws_lambda_function.logs_exporter_lambda.arn
 }
