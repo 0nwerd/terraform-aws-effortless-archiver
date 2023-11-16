@@ -71,7 +71,7 @@ data "aws_iam_policy_document" "lambda_policy" {
 }
 
 resource "aws_iam_role_policy" "lambda_policy" {
-  name_prefix = "efforteless-exporter"
+  name_prefix = "efforteless-archiver"
   role        = aws_iam_role.lambda_role.name
   policy      = data.aws_iam_policy_document.lambda_policy.json
 }
@@ -96,7 +96,7 @@ data "archive_file" "lambda_zip" {
   output_path = "${path.module}/lambda/lambda.zip"
 }
 
-resource "aws_lambda_function" "logs_exporter_lambda" {
+resource "aws_lambda_function" "lambda" {
   function_name    = var.name
   description      = "Export CloudWatch Logs (or QLDB Journal) to a S3 bucket"
   role             = aws_iam_role.lambda_role.arn
@@ -125,22 +125,25 @@ resource "aws_lambda_function" "logs_exporter_lambda" {
   }
 }
 
-resource "aws_lambda_permission" "log_exporter" {
-  statement_id  = "AllowExecutionFromCloudWatch"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.logs_exporter_lambda.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.logs_exporter_rule.arn
-}
-
-resource "aws_cloudwatch_event_rule" "logs_exporter_rule" {
-  name_prefix         = "efforteless-exporter"
-  description         = "Fires periodically to export logs to S3"
+##################################
+# Event Rule & Lambda Permission #
+##################################
+resource "aws_cloudwatch_event_rule" "event_rule" {
+  name_prefix         = "efforteless-archiver"
+  description         = "Fires periodically to launch export tasks"
   schedule_expression = "rate(4 hours)"
 }
 
-resource "aws_cloudwatch_event_target" "logs_exporter_target" {
-  target_id = "efforteless-exporter"
-  rule      = aws_cloudwatch_event_rule.logs_exporter_rule.name
-  arn       = aws_lambda_function.logs_exporter_lambda.arn
+resource "aws_cloudwatch_event_target" "event_target" {
+  target_id = "efforteless-archiver"
+  rule      = aws_cloudwatch_event_rule.event_rule.name
+  arn       = aws_lambda_function.lambda.arn
+}
+
+resource "aws_lambda_permission" "lambda_permission" {
+  statement_id  = "AllowExecutionFromCloudWatch"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.lambda.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.event_rule.arn
 }
