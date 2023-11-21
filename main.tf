@@ -40,13 +40,13 @@ data "aws_iam_policy_document" "lambda_policy" {
   statement {
     effect    = "Allow"
     actions   = ["s3:PutBucketAcl", "s3:GetBucketAcl"]
-    resources = [var.s3_bucket_arn]
+    resources = ["arn:aws:s3:::${var.s3_bucket_name}"]
   }
 
   statement {
     effect    = "Allow"
     actions   = ["s3:PutObject", "s3:PutObjectACL"]
-    resources = ["${var.s3_bucket_arn}/*"]
+    resources = ["arn:aws:s3:::${var.s3_bucket_name}/*"]
   }
 
   dynamic "statement" {
@@ -68,7 +68,7 @@ data "aws_iam_policy_document" "lambda_policy" {
   }
 
   dynamic "statement" {
-    for_each = var.ledger_name != null ? [1] : []
+    for_each = var.qldb_key_arn != null ? [1] : []
     content {
       effect    = "Allow"
       actions   = ["kms:Decrypt"]
@@ -91,7 +91,7 @@ module "qldb_export_role" {
   count  = var.ledger_name != null ? 1 : 0
 
   name          = var.name
-  s3_bucket_arn = var.s3_bucket_arn
+  s3_bucket_arn = "arn:aws:s3:::${var.s3_bucket_name}"
 }
 
 ###################
@@ -116,7 +116,7 @@ resource "aws_lambda_function" "lambda" {
 
   environment {
     variables = {
-      S3_BUCKET       = var.s3_bucket_arn
+      S3_BUCKET       = var.s3_bucket_name
       AWS_ACCOUNT     = var.account_id
       EXPORT_ROLE_ARN = var.ledger_name != null ? module.qldb_export_role[0].arn : null
       LEDGER_NAME     = var.ledger_name
@@ -156,7 +156,7 @@ resource "aws_cloudwatch_event_target" "event_target" {
 resource "aws_lambda_permission" "lambda_permission" {
   count = length(local.eventbridge_rules_payload)
 
-  statement_id  = "AllowExecutionFromCloudWatch"
+  statement_id  = "AllowExecutionFromCloudWatch_${count.index}"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.lambda.function_name
   principal     = "events.amazonaws.com"

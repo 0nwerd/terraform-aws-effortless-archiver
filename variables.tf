@@ -19,8 +19,8 @@ variable "schedule_expression" {
   default     = "rate(2 hours)"
 }
 
-variable "s3_bucket_arn" {
-  description = "ARN of the S3 bucket to export to"
+variable "s3_bucket_name" {
+  description = "Name of the S3 bucket to export to"
   type        = string
 }
 

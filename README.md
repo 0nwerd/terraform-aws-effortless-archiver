@@ -42,7 +42,7 @@
 | <a name="input_name"></a> [name](#input\_name) | Name of the Lambda function | `string` | n/a | yes |
 | <a name="input_qldb_key_arn"></a> [qldb\_key\_arn](#input\_qldb\_key\_arn) | ARN of the KMS key to use for encryption for QLDB (Optional) | `string` | `null` | no |
 | <a name="input_region"></a> [region](#input\_region) | AWS Region | `string` | n/a | yes |
-| <a name="input_s3_bucket_arn"></a> [s3\_bucket\_arn](#input\_s3\_bucket\_arn) | ARN of the S3 bucket to export to | `string` | n/a | yes |
+| <a name="input_s3_bucket_name"></a> [s3\_bucket\_name](#input\_s3\_bucket\_name) | Name of the S3 bucket to export to | `string` | n/a | yes |
 | <a name="input_schedule_expression"></a> [schedule\_expression](#input\_schedule\_expression) | Schedule expression for the CloudWatch Event Rule | `string` | `"rate(2 hours)"` | no |
 | <a name="input_vpc_security_group_ids"></a> [vpc\_security\_group\_ids](#input\_vpc\_security\_group\_ids) | List of security group IDs when the function should run in a VPC (Optional) | `list(string)` | `null` | no |
 | <a name="input_vpc_subnet_ids"></a> [vpc\_subnet\_ids](#input\_vpc\_subnet\_ids) | List of subnet IDs when the function should run in a VPC (Optional) | `list(string)` | `null` | no |

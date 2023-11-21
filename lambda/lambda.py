@@ -2,7 +2,7 @@ import boto3
 
 from datetime import datetime
 from os import environ
-from time import time
+from time import time,sleep
 
 
 ssm = boto3.client("ssm")
@@ -35,27 +35,27 @@ def get_logs_groups():
     return log_groups
 
 
-def export_logs(log_group_name, ssm_parameter_name, ssm_value, export_to_time, max_retries, item, S3_BUCKET, AWS_ACCOUNT_ID):
+def export_logs(log_group_name, ssm_parameter_name, ssm_value, export_time, max_retries, S3_BUCKET, AWS_ACCOUNT_ID):
     try:
         response = logs.create_export_task(
             logGroupName=log_group_name,
             fromTime=int(ssm_value),
-            to=export_to_time,
+            to=export_time,
             destination=S3_BUCKET,
-            destinationPrefix=AWS_ACCOUNT_ID + "/" + item.strip("/")
+            destinationPrefix=AWS_ACCOUNT_ID + "/" + log_group_name.strip("/")
         )
 
         ssm_response = ssm.put_parameter(
             Name=ssm_parameter_name,
             Type="String",
-            Value=str(export_to_time),
+            Value=str(export_time),
             Overwrite=True
         )
         return 0
 
     except logs.exceptions.LimitExceededException:
         max_retries = max_retries - 1
-        time.sleep(5)
+        sleep(5)
         return max_retries
 
     except Exception as e:
@@ -77,7 +77,7 @@ def export_qldb(LEDGER_NAME, S3_BUCKET, ssm_parameter_name, ssm_value, export_to
                     'ObjectEncryptionType': 'SSE_S3'
                 }
             },
-            RoleArn=os.environ["EXPORT_ROLE_ARN"],
+            RoleArn=environ["EXPORT_ROLE_ARN"],
             OutputFormat='JSON'
         )
 
@@ -93,13 +93,13 @@ def export_qldb(LEDGER_NAME, S3_BUCKET, ssm_parameter_name, ssm_value, export_to
         print(f"Error of replication : {e}")
     
     return 0
-
+    
 
 def lambda_handler(event, context):
     items = []
 
     S3_BUCKET = get_env_vars("S3_BUCKET")
-    TIME = get_env_vars("TIME")
+    TIME = time()
     export_type = event["export_type"]
 
     if "LEDGER_NAME" in environ:
@@ -107,7 +107,7 @@ def lambda_handler(event, context):
         QLDB_EXPORT_ROLE_ARN = get_env_vars("EXPORT_ROLE_ARN")
         items.append(QLDB_LEDGER_NAME)
     else:
-        AWS_ACCOUNT_ID = sts.get_caller_identity()["Account"]
+        AWS_ACCOUNT_ID = get_env_vars("AWS_ACCOUNT")
         items = get_logs_groups()
     
     for item in items:
