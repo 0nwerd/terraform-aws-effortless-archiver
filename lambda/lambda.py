@@ -100,14 +100,13 @@ def lambda_handler(event, context):
 
     S3_BUCKET = get_env_vars("S3_BUCKET")
     TIME = get_env_vars("TIME")
+    export_type = event["export_type"]
 
     if "LEDGER_NAME" in environ:
-        export_type = "qldb"
         QLDB_LEDGER_NAME = get_env_vars("LEDGER_NAME")
         QLDB_EXPORT_ROLE_ARN = get_env_vars("EXPORT_ROLE_ARN")
         items.append(QLDB_LEDGER_NAME)
     else:
-        export_type = "logs"
         AWS_ACCOUNT_ID = sts.get_caller_identity()["Account"]
         items = get_logs_groups()
     

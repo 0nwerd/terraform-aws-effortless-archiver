@@ -13,6 +13,12 @@ variable "account_id" {
   type        = string
 }
 
+variable "schedule_expression" {
+  description = "Schedule expression for the CloudWatch Event Rule"
+  type        = string
+  default     = "rate(2 hours)"
+}
+
 variable "s3_bucket_arn" {
   description = "ARN of the S3 bucket to export to"
   type        = string

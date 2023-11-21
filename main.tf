@@ -1,3 +1,10 @@
+locals {
+  eventbridge_rules_payload = [
+    "{ \"export_type\": \"logs\" }",
+    "{ \"export_type\": \"qldb\" }"
+  ]
+}
+
 ###############
 # Lambda role #
 ###############
@@ -129,21 +136,29 @@ resource "aws_lambda_function" "lambda" {
 # Event Rule & Lambda Permission #
 ##################################
 resource "aws_cloudwatch_event_rule" "event_rule" {
+  count = length(local.eventbridge_rules_payload)
+
   name_prefix         = "efforteless-archiver"
   description         = "Fires periodically to launch export tasks"
-  schedule_expression = "rate(4 hours)"
+  schedule_expression = var.schedule_expression
+
 }
 
 resource "aws_cloudwatch_event_target" "event_target" {
+  count = length(local.eventbridge_rules_payload)
+
   target_id = "efforteless-archiver"
-  rule      = aws_cloudwatch_event_rule.event_rule.name
+  rule      = aws_cloudwatch_event_rule.event_rule[count.index].name
   arn       = aws_lambda_function.lambda.arn
+  input     = local.eventbridge_rules_payload[count.index]
 }
 
 resource "aws_lambda_permission" "lambda_permission" {
+  count = length(local.eventbridge_rules_payload)
+
   statement_id  = "AllowExecutionFromCloudWatch"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.lambda.function_name
   principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.event_rule.arn
+  source_arn    = aws_cloudwatch_event_rule.event_rule[count.index].arn
 }

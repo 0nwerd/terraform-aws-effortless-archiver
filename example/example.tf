@@ -1,19 +1,9 @@
 data "aws_caller_identity" "current" {}
 
-module "example_logs" {
+module "example" {
   source = "../"
 
-  name       = "example_logs"
-  region     = "us-east-1"
-  account_id = data.aws_caller_identity.current.account_id
-
-  s3_bucket_arn = "YOUR_BUCKET_ARN"
-}
-
-module "example_qldb" {
-  source = "../"
-
-  name       = "example_qldb"
+  name       = "example"
   region     = "us-east-1"
   account_id = data.aws_caller_identity.current.account_id
 
