@@ -162,3 +162,33 @@ resource "aws_lambda_permission" "lambda_permission" {
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.event_rule[count.index].arn
 }
+
+####################
+# S3 bucket Policy #
+####################
+data "aws_iam_policy_document" "bucket_policy" {
+  statement {
+    principals {
+      type        = "Service"
+      identifiers = ["logs.${var.region}.amazonaws.com"]
+    }
+
+    actions   = ["s3:PutObject"]
+    resources = ["arn:aws:s3:::${var.s3_bucket_name}/*"]
+  }
+
+  statement {
+    principals {
+      type        = "Service"
+      identifiers = ["logs.${var.region}.amazonaws.com"]
+    }
+
+    actions   = ["s3:GetBucketAcl"]
+    resources = ["arn:aws:s3:::${var.s3_bucket_name}"]
+  }
+}
+
+resource "aws_s3_bucket_policy" "bucket_policy" {
+  bucket = var.s3_bucket_name
+  policy = data.aws_iam_policy_document.bucket_policy.json
+}

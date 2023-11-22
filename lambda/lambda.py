@@ -65,7 +65,6 @@ def export_logs(log_group_name, ssm_parameter_name, ssm_value, export_time, max_
 
 def export_qldb(LEDGER_NAME, S3_BUCKET, ssm_parameter_name, ssm_value, export_to_time, max_retries):
     try:
-        # Launch the export to S3
         response = qldb.export_journal_to_s3(
             Name=LEDGER_NAME,
             InclusiveStartTime = datetime.fromtimestamp(int(ssm_value)/1000),
@@ -81,7 +80,6 @@ def export_qldb(LEDGER_NAME, S3_BUCKET, ssm_parameter_name, ssm_value, export_to
             OutputFormat='JSON'
         )
 
-        # Update the last replication time
         ssm_response = ssm.put_parameter(
             Name=ssm_parameter_name,
             Type="String",
