@@ -98,7 +98,7 @@ def lambda_handler(event, context):
 
     S3_BUCKET = get_env_vars("S3_BUCKET")
     TIME = time()
-    export_type = event["export_type"]
+    export_type = event["detail"]["export_type"]
 
     if export_type == "qldb":
         QLDB_LEDGER_NAME = get_env_vars("LEDGER_NAME")
