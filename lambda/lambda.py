@@ -100,7 +100,7 @@ def lambda_handler(event, context):
     TIME = time()
     export_type = event["export_type"]
 
-    if "LEDGER_NAME" in environ:
+    if export_type == "qldb":
         QLDB_LEDGER_NAME = get_env_vars("LEDGER_NAME")
         QLDB_EXPORT_ROLE_ARN = get_env_vars("EXPORT_ROLE_ARN")
         items.append(QLDB_LEDGER_NAME)
